@@ -1,0 +1,20 @@
+{
+  "services": {
+    "enot": {
+      "api_url": "https://anewera.yonote.ru/api",
+      "token": "your_enot_token_here",
+      "collections": ["projects", "docs"],
+      "enabled": true
+    },
+    "github": {
+      "token": "your_github_token_here",
+      "repos": ["Staxan/hermes-agent"],
+      "enabled": false
+    },
+    "notion": {
+      "api_key": "your_notion_key_here",
+      "database_id": "your_db_id",
+      "enabled": false
+    }
+  }
+}
