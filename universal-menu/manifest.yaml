@@ -1,0 +1,31 @@
+name: universal-menu
+version: 0.1.0
+description: Universal Telegram menu system for Hermes agents
+category: productivity
+
+commands:
+  - name: menu
+    description: Show/hide the universal menu
+  - name: services
+    description: Manage connected services
+  - name: install
+    description: Install a skill from GitHub
+    args:
+      - name: url
+        type: string
+        required: true
+  - name: update
+    description: Update an installed skill
+    args:
+      - name: name
+        type: string
+        required: true
+
+hooks:
+  - on_startup: register_menu
+  - on_message: check_menu_commands
+
+toolsets:
+  - terminal
+  - file
+  - skills
