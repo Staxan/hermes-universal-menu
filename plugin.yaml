@@ -1,7 +1,7 @@
 name: universal-menu
 label: Universal Menu
 kind: standalone
-version: 0.2.0
+version: 0.3.0
 category: productivity
 description: >
   Profile-local Telegram menu with service settings and a bridge to Hermes
@@ -12,5 +12,6 @@ requires_env: []
 provides_hooks: []
 provides_tools: []
 
-# The plugin uses the Telegram menu provider API available in Hermes 0.1+.
+# The plugin uses ctx.register_telegram_handler available in the compatible
+# Hermes branch feat/universal-menu-telegram.
 # It remains inactive until explicitly enabled with `hermes plugins enable`.

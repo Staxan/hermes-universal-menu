@@ -6,8 +6,9 @@ from .menu import UniversalMenu
 
 
 def register(ctx) -> None:
-    """Register the profile-local Telegram menu provider."""
-    ctx.register_telegram_menu(UniversalMenu())
+    """Register handlers through the stable Telegram plugin extension point."""
+    menu = UniversalMenu()
+    ctx.register_telegram_handler(menu.register_handlers)
     ctx.register_command("universal-menu", _command, "Show Universal Menu help")
 
 
@@ -19,3 +20,4 @@ def _command(raw_args: str = "") -> str:
 
 
 __all__ = ["register", "UniversalMenu"]
+
