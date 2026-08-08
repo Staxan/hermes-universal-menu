@@ -70,7 +70,7 @@ hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --force --enable
 
 # Verify discovery before asking the user to restart a gateway.
 if ! hermes_cli --profile "$PROFILE" plugins list --plain --no-bundled \
-    | grep -q '^universal-menu'; then
+    | grep -Eq '(^|[[:space:]])universal-menu([[:space:]]|$)'; then
   fatal "Universal Menu was not discovered after installation"
 fi
 
