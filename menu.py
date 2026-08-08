@@ -6,9 +6,9 @@ from typing import Any
 
 try:
     from telegram import KeyboardButton, ReplyKeyboardMarkup
-    from telegram.ext import MessageHandler, filters
+    from telegram.ext import CommandHandler, MessageHandler, filters
 except ImportError:  # pragma: no cover - loaded only in Telegram runtime
-    KeyboardButton = ReplyKeyboardMarkup = MessageHandler = filters = None
+    KeyboardButton = ReplyKeyboardMarkup = CommandHandler = MessageHandler = filters = None
 
 
 class UniversalMenu:
@@ -23,9 +23,35 @@ class UniversalMenu:
         """Wire namespaced Telegram text handling before Hermes core handlers."""
         if MessageHandler is None:
             raise RuntimeError("python-telegram-bot is required for Universal Menu")
+        if CommandHandler is None:
+            raise RuntimeError("python-telegram-bot is required for Universal Menu")
+        adapter._plugin_reply_markup = self.keyboard()
+        application.add_handler(CommandHandler("menu", self.command_menu))
+        application.add_handler(CommandHandler("services", self.command_services))
+        application.add_handler(CommandHandler("help_menu", self.command_help))
         application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_update)
         )
+
+    async def command_menu(self, update: Any, context: Any) -> None:
+        message = getattr(update, "effective_message", None)
+        if message is not None:
+            await message.reply_text("Меню Universal Menu включено.", reply_markup=self.keyboard())
+
+    async def command_services(self, update: Any, context: Any) -> None:
+        message = getattr(update, "effective_message", None)
+        if message is not None:
+            await message.reply_text(self._services_text(), reply_markup=self.keyboard())
+
+    async def command_help(self, update: Any, context: Any) -> None:
+        message = getattr(update, "effective_message", None)
+        if message is not None:
+            await message.reply_text(self._help_text(), reply_markup=self.keyboard())
+
+    @staticmethod
+    def persistent_keyboard() -> Any:
+        """Return the keyboard used on a normal outgoing bot reply."""
+        return UniversalMenu().keyboard()
 
     def keyboard(self) -> Any:
         if ReplyKeyboardMarkup is None:
