@@ -6,10 +6,9 @@ set -Eeuo pipefail
 # the plugin into the selected profile. No secrets are read or written.
 
 PLUGIN_REPO="${UNIVERSAL_MENU_REPO:-https://github.com/Staxan/hermes-universal-menu.git}"
-PLUGIN_REF="${UNIVERSAL_MENU_REF:-main}"
 HERMES_REPO="${UNIVERSAL_MENU_HERMES_REPO:-https://github.com/Staxan/hermes-agent.git}"
 HERMES_REF="${UNIVERSAL_MENU_HERMES_REF:-feat/universal-menu-telegram}"
-HERMES_EXPECTED_SHA="${UNIVERSAL_MENU_HERMES_SHA:-7c4cde9e824771ea64856b92acfde65e4de986c9}"
+HERMES_EXPECTED_SHA="${UNIVERSAL_MENU_HERMES_SHA:-3219facd1eaca760840f974803d1b0b074319529}"
 PROFILE="${HERMES_PROFILE:-${1:-nika-redaktor}}"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 CHECKOUT="$HERMES_HOME/hermes-agent-universal-menu"
@@ -67,7 +66,7 @@ hermes_cli() {
     hermes "$@"
 }
 
-hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --ref "$PLUGIN_REF" --force --enable
+hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --force --enable
 
 # Verify discovery before asking the user to restart a gateway.
 if ! hermes_cli --profile "$PROFILE" plugins list --plain --no-bundled \
