@@ -67,9 +67,10 @@ hermes_cli() {
 }
 
 hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --force --enable
-# The repository is the source of truth; remove stale nested legacy manifests
-# left by older plugin layouts before discovery/runtime checks.
-find "$PLUGIN_DIR" -path '*/universal-menu/manifest.yaml' -type f -delete 2>/dev/null || true
+# The repository is the source of truth. Older releases may have left a nested
+# legacy manifest; remove only that known stale path after installation.
+find "$HOME/.hermes/profiles/$PROFILE/plugins/universal-menu/universal-menu" \
+  -path '*/manifest.yaml' -type f -delete 2>/dev/null || true
 
 # Verify discovery before asking the user to restart a gateway.
 if ! hermes_cli --profile "$PROFILE" plugins list --plain --no-bundled \
