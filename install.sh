@@ -58,22 +58,22 @@ if [[ -n "$HERMES_EXPECTED_SHA" && "$ACTUAL_SHA" != "$HERMES_EXPECTED_SHA" ]]; t
 fi
 say "compatible Hermes checkout: $ACTUAL_SHA"
 
-# Use the checkout's Python package explicitly; profile data remains in the
-# normal Hermes home and the global Hermes installation is left untouched.
-# Run Hermes from the compatible checkout without requiring a global reinstall.
+# Keep the working Hermes virtualenv/CLI (and its dependencies), but put the
+# compatible checkout first on PYTHONPATH. The global installation is not
+# overwritten.
 hermes_cli() {
-  (
-    cd "$CHECKOUT"
-    PYTHONPATH="$CHECKOUT${PYTHONPATH:+:$PYTHONPATH}" \
-      python3 -m hermes_cli.main "$@"
-  )
+  PYTHONPATH="$CHECKOUT${PYTHONPATH:+:$PYTHONPATH}" \
+    hermes "$@"
 }
 
 hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --force --enable
 
 # Verify discovery before asking the user to restart a gateway.
-hermes_cli --profile "$PROFILE" plugins list | grep -q 'universal-menu' \
-  || fatal "Universal Menu was not discovered after installation"
+if ! hermes_cli --profile "$PROFILE" plugins list --plain --no-bundled \
+    | grep -q '^universal-menu'; then
+  fatal "Universal Menu was not discovered after installation"
+fi
+
 
 say "installed Universal Menu in profile: $PROFILE"
 say "restart only this profile's Gateway to activate Telegram handlers:"
