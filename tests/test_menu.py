@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 def load_menu():
     path = Path(__file__).parents[1] / "menu.py"
-    spec = importlib.util.spec_from_file_location("universal_menu_menu", path)
+    spec = importlib.util.spec_from_file_location("universal_menu_test_menu", path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(module)
     return module.UniversalMenu
 
@@ -16,59 +16,63 @@ def load_menu():
 UniversalMenu = load_menu()
 
 
-def test_menu_labels_and_keyboard_without_telegram_dependency():
-    menu = UniversalMenu()
-    assert "☰ Меню" in {label for row in menu.BUTTONS for label in row}
-    assert menu._services_text().startswith("⚙ Сервисы")
+class Message:
+    def __init__(self, text):
+        self.text = text
+        self.replies = []
+
+    async def reply_text(self, text, **kwargs):
+        self.replies.append((text, kwargs))
 
 
-def test_text_handler_consumes_menu_button():
-    sent = []
+def test_labels():
+    assert UniversalMenu.BUTTONS[0] == ("☰ Меню", "⚙ Сервисы")
+    assert UniversalMenu.BUTTONS[1] == ("🔀 Сменить модель", "ℹ Помощь")
 
-    class Adapter:
-        async def send(self, chat_id, content, **kwargs):
-            sent.append((chat_id, content, kwargs))
 
-    message = SimpleNamespace(text="ℹ Помощь", chat=SimpleNamespace(id=42), message_thread_id=None)
+def test_text_handler_replies_to_menu_button():
+    message = Message("☰ Меню")
     update = SimpleNamespace(effective_message=message)
-    consumed = asyncio.run(UniversalMenu().handle_text(Adapter(), update, None))
-    assert consumed is True
-    assert sent[0][0] == "42"
-    assert "/model" in sent[0][1]
+    asyncio.run(UniversalMenu().handle_update(update, None))
+    assert message.replies
+    assert "включено" in message.replies[0][0]
 
 
-def test_callback_handler_only_consumes_um_namespace():
-    menu = UniversalMenu()
-
-    class Query:
-        data = "other:callback"
-
-        async def answer(self):
-            pass
-
-    update = SimpleNamespace(callback_query=Query())
-    assert asyncio.run(menu.handle_callback(None, update, None)) is False
+def test_text_handler_replies_to_services_button():
+    message = Message("⚙ Сервисы")
+    update = SimpleNamespace(effective_message=message)
+    asyncio.run(UniversalMenu().handle_update(update, None))
+    assert "без ключей" in message.replies[0][0]
 
 
-def test_callback_handler_consumes_um_namespace():
-    class Query:
-        data = "um:services"
+def test_unknown_text_is_safe():
+    message = Message("обычный текст")
+    update = SimpleNamespace(effective_message=message)
+    asyncio.run(UniversalMenu().handle_update(update, None))
+    assert message.replies == []
 
-        async def answer(self):
-            self.answered = True
 
-    query = Query()
-    update = SimpleNamespace(callback_query=query)
-    assert asyncio.run(UniversalMenu().handle_callback(None, update, None)) is True
-    assert query.answered is True
+def test_register_handlers_public_api_exists():
+    assert callable(UniversalMenu().register_handlers)
+
+
+def test_help_text_is_non_secret():
+    assert "token" not in UniversalMenu._help_text().lower()
+
+
+def test_services_text_is_non_secret():
+    assert "ключей" in UniversalMenu._services_text()
+
+
+def test_model_button_mentions_builtin_command():
+    message = Message("🔀 Сменить модель")
+    update = SimpleNamespace(effective_message=message)
+    asyncio.run(UniversalMenu().handle_update(update, None))
+    assert "/model" in message.replies[0][0]
 
 
 if __name__ == "__main__":
-    for name in (
-        "test_menu_labels_and_keyboard_without_telegram_dependency",
-        "test_text_handler_consumes_menu_button",
-        "test_callback_handler_only_consumes_um_namespace",
-        "test_callback_handler_consumes_um_namespace",
-    ):
-        globals()[name]()
-    print("4 smoke tests passed")
+    for name in sorted(globals()):
+        if name.startswith("test_"):
+            globals()[name]()
+    print("8 smoke tests passed")

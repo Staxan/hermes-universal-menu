@@ -8,6 +8,7 @@ set -Eeuo pipefail
 PLUGIN_REPO="${UNIVERSAL_MENU_REPO:-https://github.com/Staxan/hermes-universal-menu.git}"
 HERMES_REPO="${UNIVERSAL_MENU_HERMES_REPO:-https://github.com/Staxan/hermes-agent.git}"
 HERMES_REF="${UNIVERSAL_MENU_HERMES_REF:-feat/universal-menu-telegram}"
+HERMES_EXPECTED_SHA="${UNIVERSAL_MENU_HERMES_SHA:-7c4cde9e824771ea64856b92acfde65e4de986c9}"
 PROFILE="${HERMES_PROFILE:-${1:-nika-redaktor}}"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 CHECKOUT="$HERMES_HOME/hermes-agent-universal-menu"
@@ -51,7 +52,11 @@ grep -q 'def register_telegram_handler' "$CHECKOUT/hermes_cli/plugins.py" \
 grep -q 'def _wire_plugin_handlers' "$CHECKOUT/plugins/platforms/telegram/adapter.py" \
   || fatal "Hermes branch lacks Telegram plugin wiring"
 
-say "compatible Hermes checkout: $(git -C "$CHECKOUT" rev-parse HEAD)"
+ACTUAL_SHA="$(git -C "$CHECKOUT" rev-parse HEAD)"
+if [[ -n "$HERMES_EXPECTED_SHA" && "$ACTUAL_SHA" != "$HERMES_EXPECTED_SHA" ]]; then
+  fatal "unexpected Hermes revision: $ACTUAL_SHA (expected $HERMES_EXPECTED_SHA)"
+fi
+say "compatible Hermes checkout: $ACTUAL_SHA"
 
 # Use the checkout's Python package explicitly; profile data remains in the
 # normal Hermes home and the global Hermes installation is left untouched.
@@ -65,10 +70,6 @@ hermes_cli() {
 }
 
 hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --force --enable
-
-# The install command may be available only through the active global CLI in
-# older environments; retry through it only if the checkout invocation fails.
-
 
 # Verify discovery before asking the user to restart a gateway.
 hermes_cli --profile "$PROFILE" plugins list | grep -q 'universal-menu' \
