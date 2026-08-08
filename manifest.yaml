@@ -21,9 +21,9 @@ commands:
         type: string
         required: true
 
-hooks:
-  - on_startup: register_menu
-  - on_message: check_menu_commands
+# Runtime handlers are registered through the Python plugin API.
+# Do not declare legacy hooks here: the compatible Hermes branch validates
+# hook names and would load these as unrelated legacy callbacks.
 
 toolsets:
   - terminal

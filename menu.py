@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import re
 
 try:
     from telegram import KeyboardButton, ReplyKeyboardMarkup
@@ -21,14 +22,18 @@ class UniversalMenu:
 
     def register_handlers(self, application: Any, adapter: Any) -> None:
         """Wire namespaced Telegram text handling before Hermes core handlers."""
-        if MessageHandler is None or CommandHandler is None:
+        if MessageHandler is None or CommandHandler is None or filters is None:
             raise RuntimeError("python-telegram-bot is required for Universal Menu")
         adapter._plugin_reply_markup = self.keyboard()
         application.add_handler(CommandHandler("menu", self.command_menu))
         application.add_handler(CommandHandler("services", self.command_services))
         application.add_handler(CommandHandler("help_menu", self.command_help))
+        button_labels = [label for row in self.BUTTONS for label in row]
+        button_filter = filters.Regex(
+            r"^(?:" + "|".join(re.escape(label) for label in button_labels) + r")$"
+        )
         application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_update)
+            MessageHandler(filters.TEXT & ~filters.COMMAND & button_filter, self.handle_update)
         )
 
     async def command_menu(self, update: Any, context: Any) -> None:
