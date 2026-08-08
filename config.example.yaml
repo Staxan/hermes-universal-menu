@@ -1,0 +1,22 @@
+universal_menu:
+  enabled: true
+  keyboard_mode: persistent
+  owner_ids: []
+  services:
+    enot:
+      enabled: false
+      api_url: https://anewera.yonote.ru/api
+      token_env: ENOT_API_TOKEN
+
+# Keep secrets in the profile .env file, never in this YAML or Git.
+# ENOT_API_TOKEN=... belongs in:
+# ~/.hermes/profiles/<profile>/.env
+# and should be chmod 600.
+
+# To enable the plugin after installation:
+# hermes plugins enable universal-menu
+# Then restart the target profile gateway.
+
+# The model button delegates to Hermes' built-in /model picker. It supports
+# session-level switching without restarting the gateway.
+

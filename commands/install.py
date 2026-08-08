@@ -36,21 +36,28 @@ class RepositoryManager:
             )
         else:
             result = terminal(
-                command=f"git clone {url}, {repo_path}",
+                command=f"git clone {url} {repo_path}",
                 timeout=120
             )
 
         if result.get("exit_code") != 0:
             return {"success": False, "error": result.get("error", "Git clone failed")}
 
-        # Read manifest
-        manifest_path = repo_path / "manifest.json"
+        # Read manifest (native YAML first, legacy JSON supported)
+        manifest_path = repo_path / "manifest.yaml"
         if not manifest_path.exists():
-            return {"success": False, "error": "manifest.json not found"}
+            manifest_path = repo_path / "manifest.json"
+        if not manifest_path.exists():
+            return {"success": False, "error": "manifest.yaml/manifest.json not found"}
 
         try:
             manifest_content = read_file(path=str(manifest_path))
-            manifest = json.loads(manifest_content.get("content", "{}"))
+            raw_manifest = manifest_content.get("content", "{}")
+            if manifest_path.suffix in {".yaml", ".yml"}:
+                import yaml
+                manifest = yaml.safe_load(raw_manifest) or {}
+            else:
+                manifest = json.loads(raw_manifest)
         except Exception as e:
             return {"success": False, "error": f"Invalid manifest: {e}"}
 
@@ -62,7 +69,7 @@ class RepositoryManager:
                 target_path = self.SKILLS_DIR / skill.get("id", skill.get("name", repo_name))
                 # Copy skill directory
                 terminal(
-                    command=f"cp -r {skill_path}, {target_path}",
+                    command=f"mkdir -p {target_path.parent} && cp -r {skill_path} {target_path}",
                     timeout=30
                 )
                 installed.append(skill.get("id", skill.get("name")))
@@ -110,10 +117,17 @@ class RepositoryManager:
             return {"success": False, "error": result.get("error", "Git pull failed")}
 
         # Re-read manifest and update skills
-        manifest_path = repo_path / "manifest.json"
+        manifest_path = repo_path / "manifest.yaml"
+        if not manifest_path.exists():
+            manifest_path = repo_path / "manifest.json"
         try:
             manifest_content = read_file(path=str(manifest_path))
-            manifest = json.loads(manifest_content.get("content", "{}"))
+            raw_manifest = manifest_content.get("content", "{}")
+            if manifest_path.suffix in {".yaml", ".yml"}:
+                import yaml
+                manifest = yaml.safe_load(raw_manifest) or {}
+            else:
+                manifest = json.loads(raw_manifest)
         except Exception:
             return {"success": False, "error": "Invalid manifest"}
 
@@ -124,7 +138,7 @@ class RepositoryManager:
             if skill_path.exists():
                 target_path = self.SKILLS_DIR / skill.get("id", skill.get("name", name))
                 terminal(
-                    command=f"cp -r {skill_path}, {target_path}",
+                    command=f"mkdir -p {target_path.parent} && cp -r {skill_path} {target_path}",
                     timeout=30
                 )
                 installed.append(skill.get("id", skill.get("name")))

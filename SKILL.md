@@ -1,7 +1,7 @@
 ---
 name: universal-menu
 description: Universal menu system for Hermes Telegram agents — dynamic inline/ReplyKeyboard menus, external service adapters (ENOT, GitHub, Notion), model switcher, and GitHub auto-update.
-version: 0.1.0
+version: 0.2.0
 author: Staxan
 ---
 

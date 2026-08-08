@@ -16,23 +16,51 @@
 ~/.hermes/repositories/hermes-universal-menu
 ```
 
-## Вариант 1. Установка через Telegram
+## Вариант 1. Установка как Hermes plugin — рекомендуемый способ
 
-В чате с агентом Hermes отправь:
+Установка выполняется в нужный профиль:
+
+```bash
+hermes --profile <профиль> plugins install \
+  https://github.com/Staxan/hermes-universal-menu.git \
+  --enable
+```
+
+Если текущая версия CLI не знает `--enable`:
+
+```bash
+hermes --profile <профиль> plugins install \
+  https://github.com/Staxan/hermes-universal-menu.git
+hermes --profile <профиль> plugins enable universal-menu
+```
+
+После установки перезапусти gateway целевого профиля:
+
+```bash
+hermes --profile <профиль> gateway restart
+hermes --profile <профиль> gateway status
+```
+
+В Telegram отправь `/model` или дождись первого ответа — появится постоянная клавиатура:
+
+```text
+☰ Меню     ⚙ Сервисы
+🔀 Сменить модель     ℹ Помощь
+```
+
+### Вариант 2. Установка через Telegram
+
+Команда `/install` остаётся планируемым UX-слоем. В текущем MVP установку plugin безопаснее выполнять через CLI, потому что Telegram-установка должна дополнительно проверять владельца и права профиля.
+
+Если `/install` уже подключён в конкретной версии Hermes, используй:
 
 ```text
 /install https://github.com/Staxan/hermes-universal-menu.git
 ```
 
-После установки выполни:
+После установки всё равно выполни restart gateway целевого профиля. Не запускай один Telegram token одновременно в двух профилях.
 
-```text
-/menu
-```
-
-Если команда `/install` не поддерживается текущим профилем, используй ручную установку.
-
-## Вариант 2. Ubuntu / WSL
+## Вариант 3. Ubuntu / WSL
 
 ```bash
 sudo apt update
@@ -56,7 +84,7 @@ python3 -m py_compile \
   "$HOME/.hermes/skills/universal-menu/commands/install.py"
 ```
 
-## Вариант 3. Windows PowerShell
+## Вариант 4. Windows PowerShell
 
 Установи Git и Python 3.10+ заранее, затем выполни:
 
@@ -78,7 +106,7 @@ Get-ChildItem $skill -Recurse -File | Select-Object FullName
 
 Если Hermes работает внутри WSL, выполняй команды из раздела Ubuntu/WSL.
 
-## Вариант 4. macOS
+## Вариант 5. macOS
 
 ```bash
 xcode-select --install  # пропусти, если Git уже установлен
@@ -92,7 +120,7 @@ cp -r "$HOME/.hermes/repositories/hermes-universal-menu/"* \
   "$HOME/.hermes/skills/universal-menu/"
 ```
 
-## Вариант 5. CLI Hermes
+## Вариант 6. CLI Hermes
 
 Если команда доступна в установленной версии Hermes:
 
