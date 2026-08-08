@@ -6,6 +6,7 @@ set -Eeuo pipefail
 # the plugin into the selected profile. No secrets are read or written.
 
 PLUGIN_REPO="${UNIVERSAL_MENU_REPO:-https://github.com/Staxan/hermes-universal-menu.git}"
+PLUGIN_REF="${UNIVERSAL_MENU_REF:-main}"
 HERMES_REPO="${UNIVERSAL_MENU_HERMES_REPO:-https://github.com/Staxan/hermes-agent.git}"
 HERMES_REF="${UNIVERSAL_MENU_HERMES_REF:-feat/universal-menu-telegram}"
 HERMES_EXPECTED_SHA="${UNIVERSAL_MENU_HERMES_SHA:-7c4cde9e824771ea64856b92acfde65e4de986c9}"
@@ -66,12 +67,16 @@ hermes_cli() {
     hermes "$@"
 }
 
-hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --force --enable
+hermes_cli --profile "$PROFILE" plugins install "$PLUGIN_REPO" --ref "$PLUGIN_REF" --force --enable
 
 # Verify discovery before asking the user to restart a gateway.
 if ! hermes_cli --profile "$PROFILE" plugins list --plain --no-bundled \
     | grep -Eq '(^|[[:space:]])universal-menu([[:space:]]|$)'; then
   fatal "Universal Menu was not discovered after installation"
+fi
+
+if [[ -n "${UNIVERSAL_MENU_E2E:-}" ]]; then
+  say "E2E mode requested; restart the selected profile Gateway manually after this command."
 fi
 
 

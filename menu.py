@@ -21,9 +21,7 @@ class UniversalMenu:
 
     def register_handlers(self, application: Any, adapter: Any) -> None:
         """Wire namespaced Telegram text handling before Hermes core handlers."""
-        if MessageHandler is None:
-            raise RuntimeError("python-telegram-bot is required for Universal Menu")
-        if CommandHandler is None:
+        if MessageHandler is None or CommandHandler is None:
             raise RuntimeError("python-telegram-bot is required for Universal Menu")
         adapter._plugin_reply_markup = self.keyboard()
         application.add_handler(CommandHandler("menu", self.command_menu))
