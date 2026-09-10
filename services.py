@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 import urllib.request
 from typing import Any, Dict
 
@@ -30,6 +31,8 @@ def enot_settings() -> Dict[str, Any]:
 
 def enot_probe(api_url: str, token: str, timeout: int = 10) -> Dict[str, Any]:
     # Проверка живого доступа: POST auth.info.
+    # Работает и с HTTPS напрямую, и с локальным мостом (http://192.168.1.140:8788/api),
+    # который ходит в ENOT мимо VPN-туннеля со стороны Windows.
     # Возвращает {'ok': True, 'user': имя} или {'ok': False, 'error': причина}.
     try:
         req = urllib.request.Request(
@@ -48,8 +51,16 @@ def enot_probe(api_url: str, token: str, timeout: int = 10) -> Dict[str, Any]:
             user = (data.get("data") or {}).get("user") or {}
             return {"ok": True, "user": user.get("name", "")}
         return {"ok": False, "error": str(data.get("error", "unknown_error"))}
+    except urllib.error.HTTPError as e:
+        return {"ok": False, "error": f"HTTP {e.code}"}
     except Exception as e:
-        return {"ok": False, "error": str(e)[:120]}
+        text = str(e)
+        # Обрыв TLS = трафик уходит в VPN-туннель, а ENOT отбивает зарубежные
+        # адреса. Честная подсказка вместо пугающего «недоступен».
+        if "SSL" in text or "timed out" in text or "URLError" in text or "EOF" in text:
+            return {"ok": False, "error": "прямой маршрут к ENOT заблокирован VPN-туннелем",
+                    "hint": "запусти «Запустить ЕНОТ-мост.bat» и поставь api_url моста в настройки профиля"}
+        return {"ok": False, "error": text[:120]}
 
 
 def enot_status() -> Dict[str, Any]:

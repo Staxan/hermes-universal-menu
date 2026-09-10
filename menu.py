@@ -102,6 +102,9 @@ class UniversalMenu:
             reason = status.get("error", "")
             if reason:
                 lines.append(f"   причина: {reason}")
+            hint = status.get("hint")
+            if hint:
+                lines.append(f"   что делать: {hint}")
         lines.append("")
         lines.append("Смена модели: команда /model.")
         return "\n".join(lines)
