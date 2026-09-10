@@ -11,6 +11,11 @@ try:
 except ImportError:  # pragma: no cover - loaded only in Telegram runtime
     KeyboardButton = ReplyKeyboardMarkup = CommandHandler = MessageHandler = filters = None
 
+try:
+    from .services import enot_status
+except ImportError:  # pragma: no cover - fall back to static text outside the package
+    enot_status = None
+
 
 class UniversalMenu:
     """Small profile-local menu implemented through Hermes' handler API."""
@@ -81,12 +86,25 @@ class UniversalMenu:
 
     @staticmethod
     def _services_text() -> str:
-        return (
-            "⚙ Сервисы\n\n"
-            "Базовое меню работает без ключей.\n"
-            "ENOT/Yonote пока не настроен.\n\n"
-            "Для ручной настройки см. config.example.yaml и INSTALL.md."
-        )
+        # Живой статус сервисов из настроек профиля (universal_menu.services).
+        lines = ["⚙ Сервисы", ""]
+        if enot_status is None:
+            lines.append("ENOT/Yonote: модуль статуса недоступен.")
+            return "\n".join(lines)
+        status = enot_status()
+        if status.get("ok"):
+            lines.append(f"✅ ENOT/Yonote — подключен ({status.get('user', '')})")
+        elif status.get("error") == "disabled":
+            lines.append("⛔ ENOT/Yonote — выключен в настройках профиля")
+            lines.append(f"   включить: {status.get('hint', 'universal_menu.services.enot.enabled')}: true")
+        else:
+            lines.append("❌ ENOT/Yonote — недоступен")
+            reason = status.get("error", "")
+            if reason:
+                lines.append(f"   причина: {reason}")
+        lines.append("")
+        lines.append("Смена модели: команда /model.")
+        return "\n".join(lines)
 
     @staticmethod
     def _help_text() -> str:
