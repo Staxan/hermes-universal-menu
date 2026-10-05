@@ -36,29 +36,27 @@ class UniversalMenu:
     )
     CALLBACK_PREFIX = "um:"
 
-    def __init__(self) -> None:
+    def __init__(self, profile_name: str = "default") -> None:
         self._state: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
+        self._profile_name = profile_name or "default"
         self._active_documents: Dict[str, Dict[str, Any]] = self._load_active_documents()
 
-    @staticmethod
-    def _active_documents_path() -> Path:
+    def _active_documents_path(self) -> Path:
         try:
-            from hermes_constants import get_hermes_home  # type: ignore[import-not-found]
-            return Path(get_hermes_home()) / "universal-menu-active-documents.json"
+            from hermes_cli.profiles import get_profile_dir  # type: ignore[import-not-found]
+            return get_profile_dir(self._profile_name) / "universal-menu-active-documents.json"
         except Exception:
             return Path.home() / ".hermes" / "universal-menu-active-documents.json"
 
-    @classmethod
-    def _load_active_documents(cls) -> Dict[str, Dict[str, Any]]:
+    def _load_active_documents(self) -> Dict[str, Dict[str, Any]]:
         try:
-            data = json.loads(cls._active_documents_path().read_text(encoding="utf-8"))
+            data = json.loads(self._active_documents_path().read_text(encoding="utf-8"))
             return data if isinstance(data, dict) else {}
         except (OSError, ValueError, TypeError):
             return {}
 
-    @classmethod
-    def _save_active_documents(cls, documents: Dict[str, Dict[str, Any]]) -> None:
-        path = cls._active_documents_path()
+    def _save_active_documents(self, documents: Dict[str, Dict[str, Any]]) -> None:
+        path = self._active_documents_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(documents, ensure_ascii=False), encoding="utf-8")

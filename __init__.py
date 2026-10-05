@@ -7,7 +7,7 @@ from .menu import UniversalMenu
 
 def register(ctx) -> None:
     """Register handlers through the stable Telegram plugin extension point."""
-    menu = UniversalMenu()
+    menu = UniversalMenu(profile_name=getattr(ctx, "profile_name", "default"))
     ctx.register_telegram_handler(menu.register_handlers)
     menu.register_context_hook(ctx)
     ctx.register_command("universal-menu", _command, "Show Universal Menu help")

@@ -109,14 +109,15 @@ def test_active_document_context_is_injected_until_cleared():
 def test_active_document_storage_round_trip():
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "active.json"
-        original = UniversalMenu._active_documents_path
-        UniversalMenu._active_documents_path = staticmethod(lambda: path)
+        menu = UniversalMenu()
+        original = menu._active_documents_path
+        menu._active_documents_path = lambda: path
         try:
             documents = {"42": {"id": "doc-1", "title": "Книга", "text": "текст"}}
-            UniversalMenu._save_active_documents(documents)
-            assert UniversalMenu._load_active_documents() == documents
+            menu._save_active_documents(documents)
+            assert menu._load_active_documents() == documents
         finally:
-            UniversalMenu._active_documents_path = original
+            menu._active_documents_path = original
 
 
 if __name__ == "__main__":
