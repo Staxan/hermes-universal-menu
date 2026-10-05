@@ -1,78 +1,50 @@
-# Реестр сервисов для Universal Menu: читает настройки из config.yaml
-# активного профиля и проверяет живой доступ к каждому сервису.
+"""Profile-aware, read-only ENOT/Yonote service status."""
 
 from __future__ import annotations
 
-import json
 import os
-import urllib.error
-import urllib.request
 from typing import Any, Dict
 
 
 def _plugin_config() -> Dict[str, Any]:
-    # Секция universal_menu из config.yaml активного профиля.
+    # Читаем именно конфиг активного профиля, а не пользователя по умолчанию.
+    try:
+        from hermes_constants import get_hermes_home
+        import yaml
+        from pathlib import Path
+        path = Path(get_hermes_home()) / "config.yaml"
+        if path.is_file():
+            config = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            section = config.get("universal_menu", {}) if isinstance(config, dict) else {}
+            return section if isinstance(section, dict) else {}
+    except Exception:
+        pass
+    # Совместимость со средами, где конфиг уже корректно профильный через Hermes.
     try:
         from hermes_cli.config import load_config_readonly
-        cfg = load_config_readonly() or {}
+        config = load_config_readonly() or {}
+        section = config.get("universal_menu", {}) if isinstance(config, dict) else {}
+        return section if isinstance(section, dict) else {}
     except Exception:
         return {}
-    if not isinstance(cfg, dict):
-        return {}
-    return cfg.get("universal_menu") or {}
 
 
 def enot_settings() -> Dict[str, Any]:
-    # Настройки ENOT/Yonote: enabled, api_url, token_env.
-    services = _plugin_config().get("services") or {}
-    enot = services.get("enot") or {}
+    """Read ENOT settings from the active Hermes profile config."""
+    services = _plugin_config().get("services", {})
+    enot = services.get("enot", {}) if isinstance(services, dict) else {}
     return enot if isinstance(enot, dict) else {}
 
 
-def enot_probe(api_url: str, token: str, timeout: int = 10) -> Dict[str, Any]:
-    # Проверка живого доступа: POST auth.info.
-    # Работает и с HTTPS напрямую, и с локальным мостом (http://192.168.1.140:8788/api),
-    # который ходит в ENOT мимо VPN-туннеля со стороны Windows.
-    # Возвращает {'ok': True, 'user': имя} или {'ok': False, 'error': причина}.
-    try:
-        req = urllib.request.Request(
-            api_url.rstrip("/") + "/auth.info",
-            data=b"{}",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            data = json.load(r)
-        if data.get("ok"):
-            user = (data.get("data") or {}).get("user") or {}
-            return {"ok": True, "user": user.get("name", "")}
-        return {"ok": False, "error": str(data.get("error", "unknown_error"))}
-    except urllib.error.HTTPError as e:
-        return {"ok": False, "error": f"HTTP {e.code}"}
-    except Exception as e:
-        text = str(e)
-        # Обрыв TLS = трафик уходит в VPN-туннель, а ENOT отбивает зарубежные
-        # адреса. Честная подсказка вместо пугающего «недоступен».
-        if "SSL" in text or "timed out" in text or "URLError" in text or "EOF" in text:
-            return {"ok": False, "error": "прямой маршрут к ENOT заблокирован VPN-туннелем",
-                    "hint": "запусти «Запустить ЕНОТ-мост.bat» и поставь api_url моста в настройки профиля"}
-        return {"ok": False, "error": text[:120]}
-
-
 def enot_status() -> Dict[str, Any]:
-    # Полный статус ENOT для показа в разделе «Сервисы».
-    enot = enot_settings()
-    if not enot.get("enabled", False):
-        return {"ok": False, "error": "disabled", "hint": "universal_menu.services.enot.enabled"}
-    token_env = enot.get("token_env", "YONOTE_API_KEY")
-    token = os.environ.get(token_env, "")
-    if not token:
-        return {"ok": False, "error": f"нет токена ({token_env} в .env профиля)"}
-    return enot_probe(enot.get("api_url", "https://anewera.yonote.ru/api"), token)
+    """Return a safe status summary; actual API calls live in EnotAdapter."""
+    settings = enot_settings()
+    if not settings.get("enabled", False):
+        return {"ok": False, "error": "disabled"}
+    token_env = str(settings.get("token_env", "YONOTE_API_KEY"))
+    if not os.environ.get(token_env):
+        return {"ok": False, "error": "missing_token", "hint": token_env}
+    return {"ok": True, "configured": True}
 
 
-__all__ = ["enot_settings", "enot_status", "enot_probe"]
+__all__ = ["enot_settings", "enot_status"]

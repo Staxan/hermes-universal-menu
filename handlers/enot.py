@@ -53,6 +53,9 @@ class EnotAdapter:
         data = response.get("data", [])
         if isinstance(data, dict):
             data = data.get(key, data.get("items", []))
+        elif isinstance(data, list):
+            # Yonote отдаёт коллекции и документы списком прямо в поле data.
+            data = data
         if not isinstance(data, list):
             return []
         return [item for item in data if isinstance(item, dict)]
@@ -82,7 +85,10 @@ class EnotAdapter:
     def document_url(document: Dict[str, Any]) -> str:
         url = document.get("url") or document.get("publicUrl")
         if url:
-            return str(url)
+            url = str(url)
+            if url.startswith("/"):
+                return "https://app.yonote.ru" + url
+            return url
         identifier = document.get("urlId") or document.get("id", "")
         return f"https://app.yonote.ru/doc/{identifier}" if identifier else ""
 
@@ -91,11 +97,15 @@ def adapter_from_profile() -> EnotAdapter:
     """Build an adapter from the active profile without printing the token."""
     try:
         from ..services import enot_settings
-        settings = enot_settings()
-    except Exception:
-        settings = {}
+    except ImportError:
+        try:
+            from services import enot_settings
+        except ImportError:
+            enot_settings = lambda: {}
+    settings = enot_settings()
     token_env = str(settings.get("token_env", "YONOTE_API_KEY"))
     config = dict(settings)
+    config["api_url"] = settings.get("api_url", "https://app.yonote.ru/api")
     config["token"] = os.environ.get(token_env, "")
     return EnotAdapter(config)
 
