@@ -204,7 +204,15 @@ class UniversalMenu:
 
     @staticmethod
     def _help_text() -> str:
-        return "Команды: /menu, /services, /model, /install, /update."
+        return (
+            "ℹ Как подключать сервисы\n\n"
+            "Сервис подключается отдельным адаптером: задаём API-адрес и способ входа "
+            "(ключ или OAuth), проверяем доступ, затем добавляем нужные действия и кнопки. "
+            "Секреты хранятся в .env профиля, настройки — в config.yaml.\n\n"
+            "Так же можно подключить, например, Notion, Google Drive/Docs, Confluence, "
+            "Dropbox Paper, GitHub или Nextcloud — если у сервиса есть доступный API.\n\n"
+            "Это примеры возможных интеграций, не уже подключённые сервисы."
+        )
 
 
 __all__ = ["UniversalMenu"]

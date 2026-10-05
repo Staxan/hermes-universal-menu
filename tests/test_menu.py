@@ -73,12 +73,24 @@ def test_model_button_mentions_builtin_command():
     assert "/model" in message.replies[0][0]
 
 
+def test_help_text_explains_service_integration():
+    text = UniversalMenu._help_text()
+    assert "адаптер" in text
+    assert "config.yaml" in text
+    assert ".env" in text
+    assert "Notion" in text and "Confluence" in text
+    assert "не уже подключённые сервисы" in text
+
+
 def test_callback_namespace_is_compact():
     assert UniversalMenu.CALLBACK_PREFIX == "um:"
 
 
 if __name__ == "__main__":
-    for name in sorted(globals()):
-        if name.startswith("test_"):
-            globals()[name]()
-    print("8 smoke tests passed")
+    tests = [
+        value for name, value in globals().items()
+        if name.startswith("test_") and callable(value)
+    ]
+    for test in sorted(tests, key=lambda item: item.__name__):
+        test()
+    print(f"{len(tests)} smoke tests passed")
