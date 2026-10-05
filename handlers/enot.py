@@ -1,53 +1,103 @@
-"""ENOT/Yonote adapter for universal-menu skill."""
+"""Read-only ENOT/Yonote client used by Universal Menu."""
+
+from __future__ import annotations
 
 import json
+import os
+import urllib.error
+import urllib.request
 from typing import Any, Dict, List, Optional
-
-from hermes_tools import terminal
 
 
 class EnotAdapter:
-    """Adapter for ENOT/Yonote API."""
+    """Small profile-aware client for the Yonote RPC API."""
 
-    def __init__(self, config: Dict[str, Any]):
-        self.api_url = config.get("api_url", "https://anewera.yonote.ru/api")
-        self.token = config.get("token", "")
-        self.collections = config.get("collections", [])
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        config = config or {}
+        self.api_url = str(config.get("api_url", "https://app.yonote.ru/api")).rstrip("/")
+        self.token = str(config.get("token", ""))
+        self.timeout = int(config.get("timeout", 15))
 
-    def _request(self, endpoint: str, method: str = "GET", data: Optional[Dict] = None) -> Dict:
-        """Make an API request to ENOT."""
-        cmd = f'curl -s -X {method} "{self.api_url}, {endpoint}"'
-        if self.token:
-            cmd += f' -H "Authorization: Bearer {self.token}"'
-        if data:
-            cmd += f' -H "Content-Type: application/json" -d \'{json.dumps(data)}\' '
-        result = terminal(command=cmd, timeout=30)
-        if result.get("exit_code") != 0:
-            return {"error": result.get("error", "Unknown error")}
+    @property
+    def configured(self) -> bool:
+        return bool(self.api_url and self.token)
+
+    def _request(self, method: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Call one Yonote RPC method without leaking credentials."""
+        if not self.token:
+            return {"ok": False, "error": "missing_token"}
+        body = json.dumps(payload or {}, ensure_ascii=False).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.api_url}/{method.lstrip('/')}",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
         try:
-            return json.loads(result.get("output", "{}"))
-        except json.JSONDecodeError:
-            return {"error": "Invalid JSON response", "raw": result.get("output")}
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                result = json.load(response)
+            return result if isinstance(result, dict) else {"ok": False, "error": "invalid_response"}
+        except urllib.error.HTTPError as exc:
+            return {"ok": False, "error": f"HTTP {exc.code}"}
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            return {"ok": False, "error": str(exc)[:120] or "network_error"}
+        except (ValueError, json.JSONDecodeError):
+            return {"ok": False, "error": "invalid_json"}
 
-    def get_collections(self) -> List[Dict]:
-        """Get list of collections/projects."""
-        resp = self._request("collections")
-        if "error" in resp:
+    @staticmethod
+    def _items(response: Dict[str, Any], key: str) -> List[Dict[str, Any]]:
+        data = response.get("data", [])
+        if isinstance(data, dict):
+            data = data.get(key, data.get("items", []))
+        if not isinstance(data, list):
             return []
-        return resp.get("data", [])
+        return [item for item in data if isinstance(item, dict)]
 
-    def get_documents(self, collection_id: str) -> List[Dict]:
-        """Get documents in a collection."""
-        resp = self._request(f"collections/{collection_id}/documents")
-        if "error" in resp:
-            return []
-        return resp.get("data", [])
-
-    def get_document_url(self, document_id: str) -> str:
-        """Get public URL for a document."""
-        return f"https://anewera.yonote.ru/doc/{document_id}"
+    def auth_info(self) -> Dict[str, Any]:
+        return self._request("auth.info", {})
 
     def validate(self) -> bool:
-        """Validate API access."""
-        resp = self._request("auth.info")
-        return "error" not in resp
+        response = self.auth_info()
+        return response.get("ok", True) is not False and "error" not in response
+
+    def get_collections(self) -> List[Dict[str, Any]]:
+        return self._items(self._request("collections.list", {"limit": 100, "offset": 0}), "collections")
+
+    def get_documents(self, collection_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        payload: Dict[str, Any] = {"limit": 100, "offset": 0}
+        if collection_id:
+            payload["collectionId"] = collection_id
+        return self._items(self._request("documents.list", payload), "documents")
+
+    def get_document(self, document_id: str) -> Dict[str, Any]:
+        response = self._request("documents.info", {"id": document_id})
+        data = response.get("data")
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def document_url(document: Dict[str, Any]) -> str:
+        url = document.get("url") or document.get("publicUrl")
+        if url:
+            return str(url)
+        identifier = document.get("urlId") or document.get("id", "")
+        return f"https://app.yonote.ru/doc/{identifier}" if identifier else ""
+
+
+def adapter_from_profile() -> EnotAdapter:
+    """Build an adapter from the active profile without printing the token."""
+    try:
+        from ..services import enot_settings
+        settings = enot_settings()
+    except Exception:
+        settings = {}
+    token_env = str(settings.get("token_env", "YONOTE_API_KEY"))
+    config = dict(settings)
+    config["token"] = os.environ.get(token_env, "")
+    return EnotAdapter(config)
+
+
+__all__ = ["EnotAdapter", "adapter_from_profile"]

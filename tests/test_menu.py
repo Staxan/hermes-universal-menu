@@ -1,7 +1,12 @@
 import asyncio
 import importlib.util
+import sys
 from pathlib import Path
 from types import SimpleNamespace
+
+
+ROOT = Path(__file__).parents[1]
+sys.path.insert(0, str(ROOT))
 
 
 def load_menu():
@@ -38,11 +43,12 @@ def test_text_handler_replies_to_menu_button():
     assert "включено" in message.replies[0][0]
 
 
-def test_text_handler_replies_to_services_button():
+def test_services_button_is_not_static_placeholder():
     message = Message("⚙ Сервисы")
     update = SimpleNamespace(effective_message=message)
     asyncio.run(UniversalMenu().handle_update(update, None))
-    assert "без ключей" in message.replies[0][0]
+    assert message.replies
+    assert "inline" in message.replies[0][0]
 
 
 def test_unknown_text_is_safe():
@@ -60,15 +66,15 @@ def test_help_text_is_non_secret():
     assert "token" not in UniversalMenu._help_text().lower()
 
 
-def test_services_text_is_non_secret():
-    assert "ключей" in UniversalMenu._services_text()
-
-
 def test_model_button_mentions_builtin_command():
     message = Message("🔀 Сменить модель")
     update = SimpleNamespace(effective_message=message)
     asyncio.run(UniversalMenu().handle_update(update, None))
     assert "/model" in message.replies[0][0]
+
+
+def test_callback_namespace_is_compact():
+    assert UniversalMenu.CALLBACK_PREFIX == "um:"
 
 
 if __name__ == "__main__":

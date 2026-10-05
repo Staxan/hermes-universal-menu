@@ -2,44 +2,52 @@
 
 from __future__ import annotations
 
-from typing import Any
 import re
+from typing import Any, Dict, List
 
 try:
-    from telegram import KeyboardButton, ReplyKeyboardMarkup
-    from telegram.ext import CommandHandler, MessageHandler, filters
+    from telegram import (
+        InlineKeyboardButton,
+        InlineKeyboardMarkup,
+        KeyboardButton,
+        ReplyKeyboardMarkup,
+    )
+    from telegram.ext import CallbackQueryHandler, CommandHandler, MessageHandler, filters
 except ImportError:  # pragma: no cover - loaded only in Telegram runtime
-    KeyboardButton = ReplyKeyboardMarkup = CommandHandler = MessageHandler = filters = None
+    InlineKeyboardButton = InlineKeyboardMarkup = KeyboardButton = ReplyKeyboardMarkup = None
+    CallbackQueryHandler = CommandHandler = MessageHandler = filters = None
 
 try:
-    from .services import enot_status
-except ImportError:  # pragma: no cover - fall back to static text outside the package
-    enot_status = None
+    from .handlers.enot import EnotAdapter, adapter_from_profile
+    from .services import enot_settings
+except ImportError:  # pragma: no cover - direct smoke-test import
+    from handlers.enot import EnotAdapter, adapter_from_profile
+    from services import enot_settings
 
 
 class UniversalMenu:
-    """Small profile-local menu implemented through Hermes' handler API."""
+    """Profile-local Telegram menu with a read-only ENOT picker."""
 
     BUTTONS = (
         ("☰ Меню", "⚙ Сервисы"),
         ("🔀 Сменить модель", "ℹ Помощь"),
     )
+    CALLBACK_PREFIX = "um:"
+
+    def __init__(self) -> None:
+        self._state: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
 
     def register_handlers(self, application: Any, adapter: Any) -> None:
-        """Wire namespaced Telegram text handling before Hermes core handlers."""
-        if MessageHandler is None or CommandHandler is None or filters is None:
+        if any(item is None for item in (MessageHandler, CommandHandler, CallbackQueryHandler, filters)):
             raise RuntimeError("python-telegram-bot is required for Universal Menu")
         adapter._plugin_reply_markup = self.keyboard()
         application.add_handler(CommandHandler("menu", self.command_menu))
         application.add_handler(CommandHandler("services", self.command_services))
         application.add_handler(CommandHandler("help_menu", self.command_help))
         button_labels = [label for row in self.BUTTONS for label in row]
-        button_filter = filters.Regex(
-            r"^(?:" + "|".join(re.escape(label) for label in button_labels) + r")$"
-        )
-        application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND & button_filter, self.handle_update)
-        )
+        button_filter = filters.Regex(r"^(?:" + "|".join(re.escape(label) for label in button_labels) + r")$")
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & button_filter, self.handle_update))
+        application.add_handler(CallbackQueryHandler(self.handle_callback, pattern=r"^um:"))
 
     async def command_menu(self, update: Any, context: Any) -> None:
         message = getattr(update, "effective_message", None)
@@ -50,6 +58,7 @@ class UniversalMenu:
         message = getattr(update, "effective_message", None)
         if message is not None:
             await message.reply_text(self._services_text(), reply_markup=self.keyboard())
+            await self._show_services(update)
 
     async def command_help(self, update: Any, context: Any) -> None:
         message = getattr(update, "effective_message", None)
@@ -58,7 +67,6 @@ class UniversalMenu:
 
     @staticmethod
     def persistent_keyboard() -> Any:
-        """Return the keyboard used on a normal outgoing bot reply."""
         return UniversalMenu().keyboard()
 
     def keyboard(self) -> Any:
@@ -70,6 +78,11 @@ class UniversalMenu:
             is_persistent=False,
         )
 
+    @staticmethod
+    def _chat_id(update: Any) -> int:
+        chat = getattr(update, "effective_chat", None)
+        return int(getattr(chat, "id", 0) or 0)
+
     async def handle_update(self, update: Any, context: Any) -> None:
         message = getattr(update, "effective_message", None)
         if message is None:
@@ -79,35 +92,115 @@ class UniversalMenu:
             await message.reply_text("Меню Universal Menu включено.", reply_markup=self.keyboard())
         elif text == "⚙ Сервисы":
             await message.reply_text(self._services_text(), reply_markup=self.keyboard())
+            await self._show_services(update)
         elif text == "🔀 Сменить модель":
             await message.reply_text("Для выбора модели отправь команду /model.", reply_markup=self.keyboard())
         elif text == "ℹ Помощь":
             await message.reply_text(self._help_text(), reply_markup=self.keyboard())
 
+    async def _show_services(self, update: Any) -> None:
+        message = getattr(update, "effective_message", None)
+        if message is None or InlineKeyboardMarkup is None:
+            return
+        settings = enot_settings()
+        enabled = bool(settings.get("enabled", False))
+        label = "✅ ENOT" if enabled else "⛔ ENOT выключен"
+        rows = [[InlineKeyboardButton(label, callback_data=f"{self.CALLBACK_PREFIX}enot")]]
+        await message.reply_text("Выбери сервис:", reply_markup=InlineKeyboardMarkup(rows))
+
+    async def handle_callback(self, update: Any, context: Any) -> None:
+        query = getattr(update, "callback_query", None)
+        if query is None:
+            return
+        await query.answer()
+        action = str(getattr(query, "data", "")).removeprefix(self.CALLBACK_PREFIX)
+        if action == "enot":
+            await self._show_enot_root(update)
+        elif action == "collections":
+            await self._show_collections(update)
+        elif action.startswith("collection:"):
+            await self._show_documents(update, action.split(":", 1)[1])
+        elif action.startswith("document:"):
+            await self._show_document(update, action.split(":", 1)[1])
+        elif action == "back":
+            await self._show_services(update)
+
+    async def _show_enot_root(self, update: Any) -> None:
+        query = update.callback_query
+        adapter = adapter_from_profile()
+        if not adapter.configured:
+            await query.edit_message_text("❌ ENOT не настроен: проверь token_env и .env профиля.")
+            return
+        result = adapter.auth_info()
+        if result.get("ok") is False or result.get("error"):
+            await query.edit_message_text(f"❌ ENOT недоступен: {result.get('error', 'ошибка авторизации')}")
+            return
+        user = (result.get("data") or {}).get("user") or {}
+        name = user.get("name") or user.get("email") or "доступ подтверждён"
+        keyboard = [[InlineKeyboardButton("📚 Коллекции", callback_data=f"{self.CALLBACK_PREFIX}collections")],
+                    [InlineKeyboardButton("🔙 Назад", callback_data=f"{self.CALLBACK_PREFIX}back")]]
+        await query.edit_message_text(f"✅ ENOT подключён: {name}", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    async def _show_collections(self, update: Any) -> None:
+        query = update.callback_query
+        adapter = adapter_from_profile()
+        collections = adapter.get_collections()
+        chat_id = self._chat_id(update)
+        self._state.setdefault(chat_id, {})["collections"] = collections
+        if not collections:
+            await query.edit_message_text("Коллекции не найдены или ENOT недоступен.", reply_markup=self._back_markup())
+            return
+        rows = []
+        for index, collection in enumerate(collections[:20]):
+            title = collection.get("name") or collection.get("title") or f"Коллекция {index + 1}"
+            rows.append([InlineKeyboardButton(str(title)[:50], callback_data=f"{self.CALLBACK_PREFIX}collection:{index}")])
+        rows.append([InlineKeyboardButton("🔙 Назад", callback_data=f"{self.CALLBACK_PREFIX}enot")])
+        await query.edit_message_text("Выбери коллекцию:", reply_markup=InlineKeyboardMarkup(rows))
+
+    async def _show_documents(self, update: Any, index_text: str) -> None:
+        query = update.callback_query
+        chat_id = self._chat_id(update)
+        collections = self._state.get(chat_id, {}).get("collections", [])
+        try:
+            collection = collections[int(index_text)]
+        except (ValueError, IndexError):
+            await query.edit_message_text("Коллекция устарела. Открой меню заново.")
+            return
+        collection_id = collection.get("id")
+        documents = adapter_from_profile().get_documents(collection_id)
+        self._state.setdefault(chat_id, {})["documents"] = documents
+        rows = []
+        for index, document in enumerate(documents[:30]):
+            title = document.get("title") or document.get("name") or f"Документ {index + 1}"
+            rows.append([InlineKeyboardButton(str(title)[:50], callback_data=f"{self.CALLBACK_PREFIX}document:{index}")])
+        rows.append([InlineKeyboardButton("🔙 Назад", callback_data=f"{self.CALLBACK_PREFIX}collections")])
+        text = f"Документы коллекции: {collection.get('name', '')}" if documents else "Документы не найдены."
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(rows))
+
+    async def _show_document(self, update: Any, index_text: str) -> None:
+        query = update.callback_query
+        documents = self._state.get(self._chat_id(update), {}).get("documents", [])
+        try:
+            document = documents[int(index_text)]
+        except (ValueError, IndexError):
+            await query.edit_message_text("Документ устарел. Открой меню заново.")
+            return
+        identifier = document.get("id") or document.get("urlId")
+        fresh = adapter_from_profile().get_document(str(identifier)) if identifier else document
+        title = fresh.get("title") or document.get("title") or "Документ"
+        url = EnotAdapter.document_url(fresh or document)
+        body = fresh.get("text", "")
+        preview = str(body).strip()[:2500] if body else "Содержимое доступно в документе ENOT."
+        suffix = f"\n\nОткрыть: {url}" if url else ""
+        await query.edit_message_text(f"📄 {title}\n\n{preview}{suffix}", reply_markup=self._back_markup())
+
+    @staticmethod
+    def _back_markup() -> Any:
+        return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="um:collections")]])
+
     @staticmethod
     def _services_text() -> str:
-        # Живой статус сервисов из настроек профиля (universal_menu.services).
-        lines = ["⚙ Сервисы", ""]
-        if enot_status is None:
-            lines.append("ENOT/Yonote: модуль статуса недоступен.")
-            return "\n".join(lines)
-        status = enot_status()
-        if status.get("ok"):
-            lines.append(f"✅ ENOT/Yonote — подключен ({status.get('user', '')})")
-        elif status.get("error") == "disabled":
-            lines.append("⛔ ENOT/Yonote — выключен в настройках профиля")
-            lines.append(f"   включить: {status.get('hint', 'universal_menu.services.enot.enabled')}: true")
-        else:
-            lines.append("❌ ENOT/Yonote — недоступен")
-            reason = status.get("error", "")
-            if reason:
-                lines.append(f"   причина: {reason}")
-            hint = status.get("hint")
-            if hint:
-                lines.append(f"   что делать: {hint}")
-        lines.append("")
-        lines.append("Смена модели: команда /model.")
-        return "\n".join(lines)
+        return "⚙ Сервисы\n\nENOT/Yonote открывается через inline-меню."
 
     @staticmethod
     def _help_text() -> str:
