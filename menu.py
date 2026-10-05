@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import json
+from pathlib import Path
 from typing import Any, Dict, List
 
 try:
@@ -36,7 +38,32 @@ class UniversalMenu:
 
     def __init__(self) -> None:
         self._state: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
-        self._active_documents: Dict[str, Dict[str, Any]] = {}
+        self._active_documents: Dict[str, Dict[str, Any]] = self._load_active_documents()
+
+    @staticmethod
+    def _active_documents_path() -> Path:
+        try:
+            from hermes_constants import get_hermes_home  # type: ignore[import-not-found]
+            return Path(get_hermes_home()) / "universal-menu-active-documents.json"
+        except Exception:
+            return Path.home() / ".hermes" / "universal-menu-active-documents.json"
+
+    @classmethod
+    def _load_active_documents(cls) -> Dict[str, Dict[str, Any]]:
+        try:
+            data = json.loads(cls._active_documents_path().read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    @classmethod
+    def _save_active_documents(cls, documents: Dict[str, Dict[str, Any]]) -> None:
+        path = cls._active_documents_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(documents, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
 
     def register_handlers(self, application: Any, adapter: Any) -> None:
         if any(item is None for item in (MessageHandler, CommandHandler, CallbackQueryHandler, filters)):
@@ -208,6 +235,7 @@ class UniversalMenu:
         user_id = getattr(user, "id", None)
         if user_id is not None:
             self._active_documents[str(user_id)] = active_document
+        self._save_active_documents(self._active_documents)
         preview = str(body).strip()[:2500] if body else "Содержимое доступно в документе ENOT."
         suffix = f"\n\nОткрыть: {url}" if url else ""
         await query.edit_message_text(
@@ -246,6 +274,7 @@ class UniversalMenu:
                 self._active_documents.pop(key, None)
             elif len(self._active_documents) == 1:
                 self._active_documents.clear()
+            self._save_active_documents(self._active_documents)
             return None
         if not document:
             return None

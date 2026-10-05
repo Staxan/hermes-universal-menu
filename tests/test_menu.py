@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import sys
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -103,6 +104,19 @@ def test_active_document_context_is_injected_until_cleared():
         platform="telegram", sender_id="42", user_message="новая тема"
     ) is None
     assert "42" not in menu._active_documents
+
+
+def test_active_document_storage_round_trip():
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "active.json"
+        original = UniversalMenu._active_documents_path
+        UniversalMenu._active_documents_path = staticmethod(lambda: path)
+        try:
+            documents = {"42": {"id": "doc-1", "title": "Книга", "text": "текст"}}
+            UniversalMenu._save_active_documents(documents)
+            assert UniversalMenu._load_active_documents() == documents
+        finally:
+            UniversalMenu._active_documents_path = original
 
 
 if __name__ == "__main__":
