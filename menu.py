@@ -36,11 +36,14 @@ class UniversalMenu:
 
     def __init__(self) -> None:
         self._state: Dict[int, Dict[str, List[Dict[str, Any]]]] = {}
+        self._active_documents: Dict[str, Dict[str, Any]] = {}
 
     def register_handlers(self, application: Any, adapter: Any) -> None:
         if any(item is None for item in (MessageHandler, CommandHandler, CallbackQueryHandler, filters)):
             raise RuntimeError("python-telegram-bot is required for Universal Menu")
         adapter._plugin_reply_markup = self.keyboard()
+        # Inject the selected ENOT document into every subsequent agent turn.
+        application._universal_menu = self
         application.add_handler(CommandHandler("menu", self.command_menu))
         application.add_handler(CommandHandler("services", self.command_services))
         application.add_handler(CommandHandler("help_menu", self.command_help))
@@ -48,6 +51,10 @@ class UniversalMenu:
         button_filter = filters.Regex(r"^(?:" + "|".join(re.escape(label) for label in button_labels) + r")$")
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & button_filter, self.handle_update))
         application.add_handler(CallbackQueryHandler(self.handle_callback, pattern=r"^um:"))
+
+    def register_context_hook(self, ctx: Any) -> None:
+        """Register the active-document context through Hermes' public hook API."""
+        ctx.register_hook("pre_llm_call", self._inject_active_document)
 
     async def command_menu(self, update: Any, context: Any) -> None:
         message = getattr(update, "effective_message", None)
@@ -190,9 +197,66 @@ class UniversalMenu:
         title = fresh.get("title") or document.get("title") or "Документ"
         url = EnotAdapter.document_url(fresh or document)
         body = fresh.get("text", "")
+        active_document = {
+            "id": identifier,
+            "title": title,
+            "url": url,
+            "text": str(body),
+        }
+        self._active_documents[str(self._chat_id(update))] = active_document
+        user = getattr(update.callback_query, "from_user", None)
+        user_id = getattr(user, "id", None)
+        if user_id is not None:
+            self._active_documents[str(user_id)] = active_document
         preview = str(body).strip()[:2500] if body else "Содержимое доступно в документе ENOT."
         suffix = f"\n\nОткрыть: {url}" if url else ""
-        await query.edit_message_text(f"📄 {title}\n\n{preview}{suffix}", reply_markup=self._back_markup())
+        await query.edit_message_text(
+            f"📄 {title}\n\n✅ Документ выбран. Следующие поручения относятся к нему.\n\n"
+            f"{preview}{suffix}",
+            reply_markup=self._back_markup(),
+        )
+
+    @staticmethod
+    def _clear_document_command(text: str) -> bool:
+        normalized = " ".join(text.casefold().replace("ё", "е").split())
+        return normalized in {
+            "сбросить документ",
+            "снять документ",
+            "перейти к другой теме",
+            "переходим к другой теме",
+            "новая тема",
+        }
+
+    def _inject_active_document(self, **kwargs: Any) -> Any:
+        """Attach the active ENOT document to the current agent turn."""
+        platform = kwargs.get("platform", "")
+        platform = getattr(platform, "value", platform)
+        if str(platform).casefold() not in {"telegram", ""}:
+            return None
+        user_message = str(kwargs.get("user_message", "") or "")
+        key = str(kwargs.get("sender_id", "") or "")
+        document = self._active_documents.get(key)
+        if self._clear_document_command(user_message):
+            self._active_documents.pop(key, None)
+            return None
+        if not document:
+            return None
+        content = document.get("text", "")
+        if len(content) > 30000:
+            content = content[:30000] + "\n[Содержимое сокращено; используй ID/ссылку документа для дальнейшей загрузки.]"
+        return {
+            "context": (
+                "[АКТИВНЫЙ ДОКУМЕНТ ENOT]\n"
+                f"Название: {document.get('title', 'Документ')}\n"
+                f"ID: {document.get('id', '')}\n"
+                f"Ссылка: {document.get('url', '')}\n"
+                "Используй этот документ как объект текущего поручения. "
+                "Не проси пользователя повторно присылать ссылку, пока он не выбрал другой документ "
+                "или не сменил тему.\n"
+                f"Содержимое:\n{content}\n"
+                "[КОНЕЦ АКТИВНОГО ДОКУМЕНТА]"
+            )
+        }
 
     @staticmethod
     def _back_markup() -> Any:

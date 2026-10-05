@@ -86,6 +86,25 @@ def test_callback_namespace_is_compact():
     assert UniversalMenu.CALLBACK_PREFIX == "um:"
 
 
+def test_active_document_context_is_injected_until_cleared():
+    menu = UniversalMenu()
+    menu._active_documents["42"] = {
+        "id": "doc-1",
+        "title": "Книга. Версия 6.0",
+        "url": "https://app.yonote.ru/doc/doc-1",
+        "text": "Текст документа",
+    }
+    result = menu._inject_active_document(
+        platform="telegram", sender_id="42", user_message="Сделай краткий план"
+    )
+    assert result and "Книга. Версия 6.0" in result["context"]
+    assert "Текст документа" in result["context"]
+    assert menu._inject_active_document(
+        platform="telegram", sender_id="42", user_message="новая тема"
+    ) is None
+    assert "42" not in menu._active_documents
+
+
 if __name__ == "__main__":
     tests = [
         value for name, value in globals().items()
