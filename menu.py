@@ -236,8 +236,16 @@ class UniversalMenu:
         user_message = str(kwargs.get("user_message", "") or "")
         key = str(kwargs.get("sender_id", "") or "")
         document = self._active_documents.get(key)
+        if document is None and len(self._active_documents) == 1:
+            # Hermes versions may not expose the Telegram sender on the agent
+            # object. A profile-local bot normally serves one DM, so keep the
+            # selected document usable in that case as well.
+            document = next(iter(self._active_documents.values()))
         if self._clear_document_command(user_message):
-            self._active_documents.pop(key, None)
+            if key in self._active_documents:
+                self._active_documents.pop(key, None)
+            elif len(self._active_documents) == 1:
+                self._active_documents.clear()
             return None
         if not document:
             return None
